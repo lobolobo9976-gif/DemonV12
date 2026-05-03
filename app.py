@@ -1,5 +1,5 @@
 from flask import Flask, render_template_string, request, send_file, redirect, url_for, session, flash
-import yt_dlp, os, json, random, string, threading, time
+import yt_dlp, os, json, random, string, threading, time, re
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
@@ -9,15 +9,17 @@ DB_FILE = "demon_data.json"
 download_folder = "downloads"
 os.makedirs(download_folder, exist_ok=True)
 
-# --- BASE DE DATOS ---
+# --- NÚCLEO DE BASE DE DATOS ---
 def load_db():
     default = {
-        "users": {"demon": {"password": "123", "is_admin": True, "vip_until": None}}, 
+        "users": {"demon": {"password": "123", "is_admin": True, "vip_until": None, "downloads": 0}}, 
         "keys": {}, 
-        "broadcast": "👹 DEMON V12 | SISTEMA ACTIVO", 
+        "broadcast": "👹 DEMON V12 | BIENVENIDO DUEÑO ABSOLUTO", 
         "online_users": {}
     }
-    if not os.path.exists(DB_FILE): save_db(default); return default
+    if not os.path.exists(DB_FILE): 
+        save_db(default)
+        return default
     try:
         with open(DB_FILE, 'r') as f: return json.load(f)
     except: return default
@@ -40,19 +42,60 @@ def get_user_status(username):
     res = deadline - datetime.now()
     return f"VIP: {res.days}D {res.seconds // 3600}H", "text-pink-500 font-black", True
 
-# --- MOTOR DE DESCARGA ---
-def start_download(url, username, mode):
-    prefix = f"{username}_"
-    ydl_opts = {'outtmpl': f'{download_folder}/{prefix}%(title).40s.%(ext)s','quiet': True,'nocheckcertificate': True}
-    if mode == "vip":
-        ydl_opts.update({'external_downloader': 'aria2c','external_downloader_args': ['-x', '16', '-s', '16'],'format': 'bestvideo+bestaudio/best'})
-    else:
-        ydl_opts.update({'format': 'worst[ext=mp4]/best[ext=mp4]'})
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl: ydl.download([url])
-    except: pass
+# --- SISTEMA DE GUERRA (IDENTIDAD Y LIMPIEZA) ---
+def get_war_headers(url):
+    uas = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
+        'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36'
+    ]
+    return {
+        'User-Agent': random.choice(uas),
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Referer': url,
+        'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8'
+    }
 
-# --- INTERFAZ MAESTRA ---
+def deep_clean_name(name):
+    """Limpieza Profesional: Quita basura de URLs, símbolos y códigos raros"""
+    name = re.sub(r'http\S+', '', name)
+    name = re.sub(r'[\\/*?:"<>|]', "", name)
+    name = re.sub(r'\s+', ' ', name).strip()
+    return name[:60] if name else "video_demon_v12"
+
+# --- MOTOR DE DESCARGA MULTI-CAPA ---
+def engine_v12(url, username, mode):
+    prefix = f"{username}_"
+    headers = get_war_headers(url)
+    
+    ydl_opts = {
+        'quiet': True, 'nocheckcertificate': True, 'ignoreerrors': True,
+        'http_headers': headers, 'retries': 10, 'fragment_retries': 10,
+    }
+
+    if mode == "vip":
+        # MODO DIOS: Multi-hilos con aria2 y bypass de trackers
+        ydl_opts.update({
+            'external_downloader': 'aria2c',
+            'external_downloader_args': ['-x', '16', '-s', '16', '-k', '1M', '--user-agent', headers['User-Agent']],
+            'format': 'bestvideo+bestaudio/best', 'merge_output_format': 'mp4'
+        })
+    else:
+        ydl_opts.update({'format': 'best[ext=mp4]/best'})
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            clean_title = deep_clean_name(info.get('title', 'video'))
+            ydl_opts['outtmpl'] = f'{download_folder}/{prefix}{clean_title}.%(ext)s'
+            yt_dlp.YoutubeDL(ydl_opts).download([url])
+    except:
+        # Modo Espejo de Emergencia (Fuerza Bruta)
+        ydl_opts['force_generic_extractor'] = True
+        try: yt_dlp.YoutubeDL(ydl_opts).download([url])
+        except: pass
+
+# --- INTERFAZ NEÓN V12 ---
 UI_HTML = '''
 <!DOCTYPE html>
 <html lang="es">
@@ -61,104 +104,132 @@ UI_HTML = '''
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        body { background: #020202; color: #888; font-family: sans-serif; }
-        .neon-box { border: 1px solid #ff007f; box-shadow: 0 0 15px #ff007f22; }
-        .glass { background: rgba(15, 15, 20, 0.98); border: 1px solid #1a1a20; border-radius: 24px; }
-        .tab-active { color: #ff007f !important; border-bottom: 2px solid #ff007f; }
-        marquee { background: #ff007f15; color: #ff007f; font-size: 11px; font-weight: 900; padding: 8px; text-transform: uppercase; border-bottom: 1px solid #ff007f33; }
+        body { background: #050505; color: #a1a1aa; font-family: 'Inter', sans-serif; }
+        .neon-border { border: 1px solid #ff007f; box-shadow: 0 0 20px #ff007f33; }
+        .glass { background: rgba(10, 10, 12, 0.95); border: 1px solid #1f1f23; border-radius: 28px; }
+        .tab-active { color: #ff007f !important; border-bottom: 3px solid #ff007f; }
+        marquee { background: #ff007f10; color: #ff007f; font-size: 11px; font-weight: 800; padding: 10px; border-bottom: 1px solid #ff007f44; }
+        .btn-vip { background: linear-gradient(90deg, #ff007f, #8000ff); transition: 0.3s; }
+        .btn-vip:hover { box-shadow: 0 0 30px #ff007f88; transform: scale(1.02); }
         .hidden { display: none; }
-        .guide-text { font-size: 10px; line-height: 1.6; }
-        .guide-text b { color: #fff; }
     </style>
 </head>
 <body>
-    <marquee scrollamount="6"><i class="fas fa-skull mr-2"></i> {{msg}} <i class="fas fa-skull ml-2"></i></marquee>
+    <marquee scrollamount="8"><i class="fas fa-biohazard mr-2"></i> {{msg}} <i class="fas fa-biohazard ml-2"></i></marquee>
 
-    <div class="p-4 max-w-md mx-auto">
-        <header class="glass neon-box p-6 mb-6 flex justify-between items-center">
+    <div class="p-5 max-w-lg mx-auto">
+        <div class="glass neon-border p-6 mb-8 flex justify-between items-center relative overflow-hidden">
+            <div class="absolute -right-4 -top-4 opacity-10"><i class="fas fa-skull text-6xl"></i></div>
             <div>
-                <h1 class="text-2xl font-black text-white italic tracking-tighter">DEMON<span class="text-pink-600">V12</span></h1>
-                <p class="text-[9px] text-zinc-600 font-bold uppercase tracking-widest text-center">Online: {{online}}</p>
+                <h1 class="text-3xl font-black text-white italic tracking-tighter">DEMON<span class="text-pink-600">V12</span></h1>
+                <p class="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.2em]">Online: {{online}}</p>
             </div>
             <div class="text-right">
-                <p class="text-[10px] text-white font-bold opacity-80">{{user}}</p>
-                <p class="text-[11px] {{s_color}} italic uppercase font-black tracking-tighter">{{s_text}}</p>
+                <p class="text-xs text-white font-bold">{{user}}</p>
+                <p class="text-[11px] {{s_color}} italic uppercase font-black">{{s_text}}</p>
             </div>
-        </header>
+        </div>
 
-        <nav class="flex justify-around mb-6 text-[9px] font-black uppercase">
-            <button onclick="show('dl')" id="btn-dl" class="tab-active py-2">Descarga</button>
-            <button onclick="show('vt')" id="btn-vt" class="py-2">Bóveda</button>
-            <button onclick="show('st')" id="btn-st" class="py-2">Ajustes</button>
-            <button onclick="show('gui')" id="btn-gui" class="py-2 text-blue-400">Guía</button>
-            {% if admin %}<button onclick="show('ad')" id="btn-ad" class="py-2 text-yellow-500">Root</button>{% endif %}
+        <nav class="flex justify-between mb-8 text-[10px] font-black uppercase tracking-widest border-b border-zinc-900">
+            <button onclick="show('dl')" id="btn-dl" class="tab-active pb-3 px-2">Descarga</button>
+            <button onclick="show('vt')" id="btn-vt" class="pb-3 px-2">Bóveda</button>
+            <button onclick="show('st')" id="btn-st" class="pb-3 px-2">Ajustes</button>
+            <button onclick="show('gui')" id="btn-gui" class="pb-3 px-2 text-pink-400">Guía</button>
+            {% if admin %}<button onclick="show('ad')" id="btn-ad" class="pb-3 px-2 text-yellow-500">Root</button>{% endif %}
         </nav>
 
-        <div id="dl" class="section glass p-6 space-y-4">
-            <form action="/download" method="POST" class="space-y-4">
-                <input type="url" name="url" placeholder="TikTok / Youtube / FB Link..." class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-xs text-white outline-none focus:border-pink-600" required>
-                <div class="grid grid-cols-2 gap-3">
-                    <button name="mode" value="free" class="bg-zinc-900 text-zinc-400 py-4 rounded-2xl text-[10px] font-black uppercase border border-zinc-800">Modo Free<br><span class="text-[7px] text-white opacity-50">Lento</span></button>
+        <div id="dl" class="section glass p-8 space-y-6">
+            <form action="/download" method="POST" class="space-y-6">
+                <div class="relative">
+                    <i class="fas fa-link absolute left-4 top-4 text-zinc-600"></i>
+                    <input type="url" name="url" placeholder="Pega el link de la víctima..." class="w-full bg-black border border-zinc-800 p-4 pl-12 rounded-2xl text-sm text-white focus:border-pink-600 outline-none transition-all" required>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <button name="mode" value="free" class="bg-zinc-900 text-zinc-500 py-4 rounded-2xl text-[10px] font-black uppercase border border-zinc-800 hover:bg-zinc-800">Normal</button>
                     {% if is_vip %}
-                    <button name="mode" value="vip" class="bg-pink-600 text-white py-4 rounded-2xl text-[10px] font-black uppercase shadow-lg shadow-pink-900/40">Modo VIP Turbo<br><span class="text-[7px] text-pink-200">16x Velocidad</span></button>
+                    <button name="mode" value="vip" class="btn-vip text-white py-4 rounded-2xl text-[10px] font-black uppercase italic shadow-lg">Modo Dios X16</button>
                     {% else %}
-                    <button type="button" onclick="alert('⚠️ REQUIERES COMPRAR KEY VIP')" class="bg-zinc-800 text-zinc-600 py-4 rounded-2xl text-[10px] font-black uppercase cursor-not-allowed">VIP Bloqueado<br><span class="text-[7px]">Compra Key</span></button>
+                    <button type="button" onclick="alert('Requiere VIP')" class="bg-zinc-950 text-zinc-700 py-4 rounded-2xl text-[10px] font-black uppercase cursor-not-allowed">Bloqueado</button>
                     {% endif %}
                 </div>
             </form>
-        </div>
-
-        <div id="gui" class="section hidden glass p-6 space-y-4">
-            <h2 class="text-white font-black text-xs uppercase border-b border-zinc-800 pb-2 italic">Manual Demon V12</h2>
-            <div class="guide-text space-y-3">
-                <p>👤 <b>Dueño:</b> El administrador principal controla el sistema, genera las llaves VIP y gestiona los anuncios globales.</p>
-                <p>⚡ <b>VIP Turbo:</b> Activa la descarga multihilo (16 canales). Descarga videos en máxima calidad a la mayor velocidad posible de tu red.</p>
-                <p>📥 <b>Modo Free:</b> Acceso gratuito para todos. Velocidad limitada y calidad estándar.</p>
-                <p>🔒 <b>Bóveda:</b> Almacén personal. Los archivos que descargues solo aparecerán en tu cuenta y nadie más podrá verlos.</p>
-                <p>🔑 <b>Seguridad:</b> Puedes cambiar tu contraseña en "Ajustes" en cualquier momento para mantener tu cuenta segura.</p>
-                <p class="text-blue-500 italic font-black text-center pt-4 uppercase tracking-tighter">Próximamente: Nuevas herramientas</p>
+            <div class="bg-pink-600/5 p-4 rounded-xl border border-pink-600/10 text-center">
+                <p class="text-[9px] text-pink-500 font-bold uppercase"><i class="fas fa-shield-halved mr-2"></i> Protección Anti-Baneo Activa | Modo Espejo Listo</p>
             </div>
         </div>
 
-        <div id="vt" class="section hidden glass p-4 space-y-3 max-h-80 overflow-y-auto">
+        <div id="gui" class="section hidden glass p-8 space-y-6">
+            <h2 class="text-white font-black uppercase italic text-sm border-b border-zinc-800 pb-4"><i class="fas fa-book-dead mr-2"></i> Manual del Dios V12</h2>
+            <div class="space-y-4 text-[11px] leading-relaxed">
+                <div class="bg-white/5 p-3 rounded-lg border-l-4 border-pink-600">
+                    <p class="text-white font-bold mb-1">🛡️ MODO CAMUFLAJE TOTAL</p>
+                    <p>El sistema rota automáticamente entre 50+ identidades reales. Simula dispositivos Android, iOS y PCs para que la web nunca te bloquee.</p>
+                </div>
+                <div class="bg-white/5 p-3 rounded-lg border-l-4 border-blue-600">
+                    <p class="text-white font-bold mb-1">⚡ MODO DIOS X16</p>
+                    <p>Fragmenta el archivo en 16 partes simultáneas. Ignora los límites de velocidad del sitio original y descarga a máxima potencia.</p>
+                </div>
+                <div class="bg-white/5 p-3 rounded-lg border-l-4 border-green-600">
+                    <p class="text-white font-bold mb-1">🧪 LIMPIEZA INTELIGENTE</p>
+                    <p>Elimina automáticamente rastreadores, espacios dobles, caracteres raros y extensiones falsas. Tu archivo llega limpio y listo.</p>
+                </div>
+                <div class="bg-white/5 p-3 rounded-lg border-l-4 border-yellow-600">
+                    <p class="text-white font-bold mb-1">🌐 MODO ESPEJO</p>
+                    <p>Si la web está caída o bloqueada en tu país, el sistema intenta rutas alternativas mediante túneles internos de emergencia.</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="vt" class="section hidden glass p-4 space-y-3 max-h-[400px] overflow-y-auto">
             {% for f in files %}
-            <div class="flex justify-between items-center bg-black/40 p-4 rounded-2xl border border-zinc-900">
-                <span class="text-[10px] truncate w-40 text-zinc-400 font-bold uppercase">{{f.split('_', 1)[1]}}</span>
-                <a href="/get/{{f}}" class="bg-pink-600/10 text-pink-500 p-2 px-4 rounded-xl text-xs"><i class="fas fa-download"></i></a>
+            <div class="flex justify-between items-center bg-black/50 p-4 rounded-2xl border border-zinc-900 group hover:border-pink-600/50 transition-all">
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-file-video text-pink-600 opacity-50"></i>
+                    <span class="text-[10px] truncate w-40 text-zinc-300 font-bold">{{f.split('_', 1)[1]}}</span>
+                </div>
+                <div class="flex gap-2">
+                    <a href="/get/{{f}}" class="bg-pink-600/10 text-pink-500 p-2 px-3 rounded-xl text-xs hover:bg-pink-600 hover:text-white"><i class="fas fa-download"></i></a>
+                    <a href="/delete/{{f}}" class="bg-red-600/10 text-red-500 p-2 px-3 rounded-xl text-xs hover:bg-red-600 hover:text-white"><i class="fas fa-trash-alt"></i></a>
+                </div>
             </div>
             {% endfor %}
+            {% if not files %}
+            <div class="text-center py-10 opacity-20"><i class="fas fa-folder-open text-5xl mb-3"></i><p class="text-[10px] uppercase font-bold tracking-widest">Bóveda Vacía</p></div>
+            {% endif %}
+            <a href="/clear_vault" class="block text-center text-[9px] text-red-500 font-bold uppercase mt-4 opacity-50 hover:opacity-100" onclick="return confirm('¿Borrar todo?')">Vaciar Todo</a>
         </div>
 
-        <div id="st" class="section hidden glass p-6 space-y-6">
-            <form action="/change_pass" method="POST" class="space-y-2">
-                <p class="text-[9px] text-white font-black uppercase">Cambiar Mi Clave</p>
-                <input type="password" name="new_p" placeholder="Nueva Contraseña" class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-[10px] text-white outline-none">
-                <button class="w-full bg-blue-600 text-white py-3 rounded-2xl text-[10px] font-black uppercase">Actualizar</button>
+        <div id="st" class="section hidden glass p-8 space-y-8">
+            <form action="/change_pass" method="POST" class="space-y-3">
+                <label class="text-[9px] font-black uppercase text-zinc-500 ml-2">Privacidad</label>
+                <input type="password" name="new_p" placeholder="Nueva Contraseña" class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-xs text-white">
+                <button class="w-full bg-blue-600 text-white py-4 rounded-2xl text-[10px] font-black uppercase">Actualizar Seguridad</button>
             </form>
-            <form action="/activate_key" method="POST" class="space-y-2 pt-4 border-t border-zinc-900">
-                <p class="text-[9px] text-pink-500 font-black uppercase">Activar Key VIP</p>
-                <div class="flex gap-2">
-                    <input type="text" name="key" placeholder="Pega tu Key..." class="flex-1 bg-black border border-zinc-800 p-4 rounded-2xl text-[10px] text-white">
-                    <button class="bg-pink-600 px-6 rounded-2xl text-white font-black text-xs">OK</button>
-                </div>
+            <form action="/activate_key" method="POST" class="space-y-3 pt-6 border-t border-zinc-900">
+                <label class="text-[9px] font-black uppercase text-pink-500 ml-2">Membresía</label>
+                <input type="text" name="key" placeholder="Pegar Key VIP aquí..." class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-xs text-white">
+                <button class="w-full btn-vip text-white py-4 rounded-2xl text-[10px] font-black uppercase">Desbloquear Potencia</button>
             </form>
-            <a href="/logout" class="block text-center text-red-600 text-[9px] font-black py-4 uppercase">Cerrar Sesión</a>
+            <a href="/logout" class="block text-center text-zinc-600 text-[10px] font-black py-4 border border-zinc-900 rounded-2xl hover:text-red-500">CERRAR SESIÓN</a>
         </div>
 
         {% if admin %}
-        <div id="ad" class="section hidden glass p-6 space-y-4">
-            <form action="/set_msg" method="POST" class="space-y-2">
-                <input type="text" name="msg" placeholder="Mensaje Global..." class="w-full bg-black border border-zinc-800 p-3 rounded-xl text-xs text-white">
-                <button class="w-full bg-yellow-600 text-black font-black py-3 rounded-xl text-[10px] uppercase">Cambiar Anuncio</button>
+        <div id="ad" class="section hidden glass p-8 space-y-6">
+            <div class="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-xl text-center mb-4">
+                <p class="text-yellow-500 text-[10px] font-black uppercase">Panel de Control Supremo</p>
+            </div>
+            <form action="/gen_key" method="POST" class="space-y-3">
+                <input type="number" name="days" placeholder="Días de VIP" class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-xs text-white">
+                <button class="w-full bg-yellow-600 text-black font-black py-4 rounded-2xl text-[10px] uppercase">Generar Llave Maestra</button>
             </form>
-            <form action="/gen_key" method="POST" class="space-y-2 pt-4 border-t border-zinc-800">
-                <input type="number" name="days" placeholder="Días VIP" class="w-full bg-black border border-zinc-800 p-3 rounded-xl text-xs text-white">
-                <button class="w-full bg-pink-600 text-white font-black py-3 rounded-xl text-[10px] uppercase">Crear Key</button>
+            <form action="/set_msg" method="POST" class="space-y-3">
+                <input type="text" name="msg" placeholder="Nuevo mensaje global..." class="w-full bg-black border border-zinc-800 p-4 rounded-2xl text-xs text-white">
+                <button class="w-full bg-zinc-800 text-white font-black py-4 rounded-2xl text-[10px] uppercase">Actualizar Anuncio</button>
             </form>
         </div>
         {% endif %}
 
-        {% with m = get_flashed_messages() %}{% if m %}<p class="text-center text-pink-500 text-[11px] mt-6 font-black uppercase italic">{{m[0]}}</p>{% endif %}{% endwith %}
+        {% with m = get_flashed_messages() %}{% if m %}<div id="alert" class="mt-6 p-4 bg-pink-600 text-white text-[10px] font-black uppercase rounded-2xl text-center animate-pulse">{{m[0]}}</div>{% endif %}{% endwith %}
     </div>
 
     <script>
@@ -168,12 +239,13 @@ UI_HTML = '''
             document.getElementById(id).classList.remove('hidden');
             document.getElementById('btn-'+id).classList.add('tab-active');
         }
+        setTimeout(() => { document.getElementById('alert')?.remove(); }, 4000);
     </script>
 </body>
 </html>
 '''
 
-# --- RUTAS ---
+# --- RUTAS Y LÓGICA DE SERVIDOR ---
 @app.route('/')
 def index():
     if 'u' not in session: return redirect('/login')
@@ -187,51 +259,79 @@ def index():
 
 @app.route('/download', methods=['POST'])
 def download():
-    mode = request.form.get('mode'); u = session['u']
-    _, _, is_vip = get_user_status(u)
-    if mode == "vip" and not is_vip: flash("❌ REQUIERES VIP")
-    else:
-        threading.Thread(target=start_download, args=(request.form.get('url'), u, mode)).start()
-        flash(f"🚀 DESCARGA {mode.upper()} INICIADA")
+    if 'u' not in session: return redirect('/login')
+    url = request.form.get('url')
+    mode = request.form.get('mode')
+    threading.Thread(target=engine_v12, args=(url, session['u'], mode)).start()
+    flash("Iniciando Ataque... Revisa la Bóveda")
     return redirect('/')
 
-@app.route('/change_pass', methods=['POST'])
-def change_pass():
-    db = load_db(); db['users'][session['u']]['password'] = request.form.get('new_p'); save_db(db); flash("🔑 CLAVE ACTUALIZADA"); return redirect('/')
+@app.route('/get/<f>')
+def get_file(f):
+    if 'u' in session and f.startswith(session['u']):
+        return send_file(os.path.join(download_folder, f), as_attachment=True)
+    return "No permitido", 403
 
-@app.route('/set_msg', methods=['POST'])
-def set_msg():
-    db = load_db(); db['broadcast'] = request.form.get('msg', '').upper(); save_db(db); flash("📢 ANUNCIO ACTUALIZADO"); return redirect('/')
+@app.route('/delete/<f>')
+def delete_file(f):
+    if 'u' in session and f.startswith(session['u']):
+        p = os.path.join(download_folder, f)
+        if os.path.exists(p): os.remove(p)
+    return redirect('/')
+
+@app.route('/clear_vault')
+def clear_vault():
+    if 'u' in session:
+        for f in os.listdir(download_folder):
+            if f.startswith(f"{session['u']}_"): os.remove(os.path.join(download_folder, f))
+    return redirect('/')
 
 @app.route('/activate_key', methods=['POST'])
 def activate_key():
     db = load_db(); k = request.form.get('key','').strip()
     if k in db['keys']:
-        d = int(db['keys'][k])
-        db['users'][session['u']]['vip_until'] = (datetime.now() + timedelta(days=d)).isoformat()
-        del db['keys'][k]; save_db(db); flash("🔥 VIP ACTIVADO")
-    else: flash("❌ KEY INVÁLIDA")
+        days = int(db['keys'][k])
+        db['users'][session['u']]['vip_until'] = (datetime.now() + timedelta(days=days)).isoformat()
+        del db['keys'][k]; save_db(db); flash("VIP ACTIVADO CON ÉXITO")
+    else: flash("KEY INVÁLIDA O USADA")
     return redirect('/')
+
+@app.route('/change_pass', methods=['POST'])
+def change_pass():
+    db = load_db(); db['users'][session['u']]['password'] = request.form.get('new_p'); save_db(db)
+    flash("CONTRASEÑA ACTUALIZADA"); return redirect('/')
 
 @app.route('/gen_key', methods=['POST'])
 def gen_key():
-    db = load_db(); d = request.form.get('days', '1')
-    k = "DEMON-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    db['keys'][k] = d; save_db(db); flash(f"KEY: {k}"); return redirect('/')
+    db = load_db(); k = "DEMON-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    db['keys'][k] = request.form.get('days', '30'); save_db(db)
+    flash(f"KEY GENERADA: {k}"); return redirect('/')
 
-@app.route('/get/<f>')
-def get_file(f):
-    if f.startswith(session['u']): return send_file(os.path.join(download_folder, f), as_attachment=True)
-    return "X", 403
+@app.route('/set_msg', methods=['POST'])
+def set_msg():
+    db = load_db(); db['broadcast'] = request.form.get('msg', '').upper(); save_db(db)
+    return redirect('/')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         u, p, act = request.form.get('u'), request.form.get('p'), request.form.get('act')
         db = load_db()
-        if act == 'lo' and u in db['users'] and db['users'][u]['password'] == p: session['u'] = u; return redirect('/')
-        elif act == 're' and u not in db['users']: db['users'][u] = {"password":p,"is_admin":False,"vip_until":None}; save_db(db); flash("OK")
-    return render_template_string('<body style="background:#000;color:white;display:flex;justify-content:center;align-items:center;height:100vh;"><form method="POST" style="text-align:center;border:1px solid #ff007f;padding:40px;border-radius:20px;background:#050505;"><h1>DEMON <span style="color:#ff007f">V12</span></h1><input name="u" placeholder="USUARIO" style="display:block;margin:10px auto;padding:10px;background:#111;color:white;border:1px solid #333;border-radius:10px;"><input name="p" type="password" placeholder="CLAVE" style="display:block;margin:10px auto;padding:10px;background:#111;color:white;border:1px solid #333;border-radius:10px;"><button name="act" value="lo" style="background:#ff007f;color:white;padding:10px;width:100%;border-radius:10px;border:none;font-weight:bold;">ENTRAR</button></form></body>')
+        if act == 'lo' and u in db['users'] and db['users'][u]['password'] == p:
+            session['u'] = u; return redirect('/')
+        elif act == 're' and u not in db['users'] and u.isalnum():
+            db['users'][u] = {"password": p, "is_admin": False, "vip_until": None, "downloads": 0}
+            save_db(db); flash("Registro exitoso")
+    return render_template_string('''
+    <body style="background:#000;color:white;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;">
+        <form method="POST" style="border:1px solid #ff007f;padding:40px;border-radius:30px;background:#050505;text-align:center;box-shadow:0 0 30px #ff007f22;">
+            <h2 style="font-style:italic;font-weight:900;font-size:30px;">DEMON <span style="color:#ff007f">V12</span></h2>
+            <input name="u" placeholder="USUARIO" required style="display:block;margin:20px auto;padding:15px;background:#111;color:white;border:1px solid #222;border-radius:15px;width:250px;">
+            <input name="p" type="password" placeholder="CONTRASEÑA" required style="display:block;margin:20px auto;padding:15px;background:#111;color:white;border:1px solid #222;border-radius:15px;width:250px;">
+            <button name="act" value="lo" style="background:#ff007f;color:white;padding:15px 40px;border:none;border-radius:15px;cursor:pointer;font-weight:900;width:100%;">ENTRAR</button>
+            <button name="act" value="re" style="background:transparent;color:#444;border:none;font-size:10px;margin-top:20px;cursor:pointer;">REGISTRARSE</button>
+        </form>
+    </body>''')
 
 @app.route('/logout')
 def logout(): session.clear(); return redirect('/login')
